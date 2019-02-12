@@ -1,0 +1,135 @@
+/*Use the following credentials in SQL Server Management Studio to access the Keys database. 
+
+1. Write queries to return the following: 
+ 
+a) Display a list of all property names and their property id’s for Owner Id: 1426.*/
+Use KeysOnboardDb
+go
+SELECT OP.OwnerId, OP.PropertyId, P.Name
+From dbo.OwnerProperty as OP
+inner join dbo.property as P on OP.propertyId = P.Id
+where OP.OwnerID=1426
+ 
+/*b) Display the current home value for each property in question a).*/
+Use KeysOnboardDb
+go
+SELECT OP.OwnerId, OP.PropertyId, P.Name, PHV.value
+From dbo.OwnerProperty as OP
+inner join dbo.Property as P on OP.propertyId = P.Id
+inner join dbo.PropertyHomeValue as PHV on OP.PropertyId = PHV.PropertyId
+where OP.OwnerID=1426 and PHV.IsActive=1
+
+/*c) For each property in question a), return the following: 
+• Using rental payment amount, rental payment frequency, tenant start date and tenant end date to
+write a query that returns the sum of all payments from start date to end date*/
+
+USE KeysOnboardDb
+GO
+SELECT PRP.PropertyId, P.Name, OP.OwnerId, OP.PropertyID, TP.StartDate, TP.EndDate, PRP.Amount,
+Sum
+(CASE 
+    when PRP.FrequencyType = 1 then (PRP.Amount / 7) * DATEDIFF (D, TP.StartDate,Tp.EndDate)
+	when PRP.FrequencyType = 2 then (PRP.Amount / 14) * DATEDIFF (D, TP.StartDate,Tp.EndDate)
+	else ((PRP.Amount * 12) / 365) *  DATEDIFF (D, TP.StartDate,Tp.EndDate)
+	END) AS Amountpaid
+FROM dbo.PropertyrentalPayment as PRP
+inner join dbo.TenantProperty as TP on TP.PropertyId=PRP.PropertyId
+inner join dbo.OwnerProperty as OP on OP.PropertyId= PRP.PropertyId
+inner join dbo.Property as P on PRP.PropertyId=P.Id
+where OP.OwnerId=1426
+group by PRP.PropertyId, P.Name, OP.OwnerId, OP.PropertyId, TP.StartDate, TP.EndDate, PRP.Amount
+
+/*Using repayment amount, repayment frequency, start date and end date to write a query that returns 
+the sum of all payments from start date to end date*/
+
+USE KeysOnboardDb
+GO
+SELECT PR.PropertyId, P.Name, OP.OwnerId, PR.StartDate, PR.EndDate, PR.Amount,
+Sum
+(CASE 
+    when PR.FrequencyType = 1 then (PR.Amount / 7) * DATEDIFF (D, PR.StartDate,PR.EndDate)
+	when PR.FrequencyType = 2 then (PR.Amount / 14) * DATEDIFF (D, PR.StartDate,PR.EndDate)
+	else ((PR.Amount * 12) / 365) *  DATEDIFF (D, PR.StartDate,PR.EndDate)
+	END) AS TotalAmountpaid
+FROM dbo.PropertyRepayment as PR
+inner join dbo.OwnerProperty as OP on OP.PropertyId= PR.PropertyId
+inner join dbo.Property as P on PR.PropertyId=P.Id
+where OP.OwnerId=1426
+group by PR.PropertyId, P.Name, OP.OwnerId, PR.StartDate, PR.EndDate, PR.Amount
+
+/*display the yield*/
+
+Use KeysOnboardDb
+GO
+SELECT OP.OwnerId, OP.PropertyId, P.Name, SUM(PF.Yield) as Yeild 
+From dbo.OwnerProperty as OP
+inner join dbo.property as P on OP.propertyId = P.Id
+inner join dbo.PropertyFinance as PF on PF.PropertyId=OP.PropertyId
+where OP.OwnerID=1426
+Group By OP.OwnerId, OP.PropertyId, P.Name
+
+/*d) Display all the jobs available in the market place (jobs that owners have advertised for service suppliers)*/
+USE KeysOnboardDb
+GO
+Select J.Id,J.PropertyId, J.OwnerId, J.JobDescription
+from Job as J
+inner join dbo.ServiceProvider as SP on J.ProviderId=SP.Id
+where J.JobStatusId=1 AND J.OwnerId is not null
+
+/*e) Display all property names, current tenants first and last names and rental payments per week/
+fortnight/month for the properties in question a)*/
+Use KeysOnboardDb
+go
+SELECT P.Name as PropertyName, OP.PropertyId, 
+concat (PS.FirstName, PS.LastName) as FullName, TPF.Name as Frequency, PRP.Amount
+From dbo.OwnerProperty as OP
+inner join dbo.property as P on OP.propertyId = P.Id
+inner join dbo.Person as PS on PS.Id=OP.OwnerId
+inner join dbo.PropertyRentalPayment as PRP on PRP.PropertyId=OP.PropertyId
+inner join dbo.TenantPaymentFrequencies as TPF on TPF.Id= PRP.FrequencyType
+where OP.OwnerID=1426
+
+/*Use Report Builder or Visual Studio (SSRS) to develop the following report: */
+USE [KeysOnboardDb]
+GO
+/****** Object:  StoredProcedure [dbo].[Onboard]    Script Date: 30/01/2019 11:00:17 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+-- =============================================
+-- Author:		<Author,,Name>
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+ALter PROCEDURE [dbo].[Onboard] 
+	-- Add the parameters for the stored procedure here
+	--<@Param1, sysname, @p1> <Datatype_For_Param1, , int> = <Default_Value_For_Param1, , 0>, 
+	--<@Param2, sysname, @p2> <Datatype_For_Param2, , int> = <Default_Value_For_Param2, , 0>
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+
+SELECT PS.FirstName as Current_Owner,
+CONCAT(A.Number,' ',A.Street,' ',A.Suburb,' ',A.Region,' ',A.PostCode) as Property_Address,
+CONCAT(PR.Bedroom,' Bedrooms , ',PR.Bathroom,' Bathrooms') as Property_details,
+Concat('$',CAST(CASE when TP.PaymentFrequencyId = 1 then TP.PaymentAmount 
+      when TP.PaymentFrequencyId = 2 then (TP.PaymentAmount/2)
+      else (((TP.PaymentAmount * 12)/365) * 7)END as INT),' ','per week') 'Rental Payment',
+	  PE.Description as Expense,
+	  PE.Amount as Amount,
+	  FORMAT(PE.Date,'dd MMM yyyy') as Date
+from dbo.Property as PR 
+inner join Address as A on PR.AddressId=A.AddressId
+inner join OwnerProperty as OP on PR.Id=OP.PropertyId
+inner join Person as PS on OP.OwnerId=PS.Id
+inner join PropertyExpense as PE on PR.Id=PE.PropertyId
+inner join TenantProperty as TP on PR.Id= TP.PropertyId
+where PR.Name='Property A'
+	END
+GO
